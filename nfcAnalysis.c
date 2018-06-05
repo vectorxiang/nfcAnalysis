@@ -129,9 +129,10 @@ int main(int argc ,char **argv)
 		}
 		
 		if(strlen(time)){
-			if(type == NCI_MT_DATA)
-				fprintf (w_fp, "%s\t%s\t\t%s\t\t\t%s\n",time,action,getPacketType(type),data_string);
-			else if(type != 0xFF){
+			if(type == NCI_MT_DATA){
+				fprintf (w_fp, "%s\t%s\t\t%s\n",time,action,getPacketType(type));
+				fprintf (w_fp, "------  %s\n",data_string);
+			}else if(type != 0xFF){
 				printControlOpration(time, action, type,data_string, data,data_length_int);				
 			}else
 				fprintf (w_fp, "%s\t%s\n",time,action);
