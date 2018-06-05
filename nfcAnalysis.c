@@ -257,7 +257,11 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 				strcpy(ctrlcommand,"GET_ROUTING");
 				break;			
 			case NCI_MSG_RF_DISCOVER :
-				strcpy(ctrlcommand,"DISCOVER");
+				strcpy(ctrlcommand,"RF_DISCOVER");
+				if(type == NCI_MT_NTF){
+					sprintf(parameter,"Dis_ID:%d , Proto: %s , Techo:%s",*(data+3), getRFProtocol(*(data+4)),
+						getRFTecoAndMode(*(data+5)));			
+				}
 				break;			
 			case NCI_MSG_RF_DISCOVER_SELECT :
 				strcpy(ctrlcommand,"DISCOVER_SELECT");
