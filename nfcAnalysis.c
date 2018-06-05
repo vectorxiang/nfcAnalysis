@@ -261,10 +261,13 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 				break;			
 			case NCI_MSG_RF_DISCOVER_SELECT :
 				strcpy(ctrlcommand,"DISCOVER_SELECT");
+				if( type == NCI_MT_CMD )
+					sprintf(parameter,"Dis_ID:%d , Intf: %s , Proto: %s",*(data+3),getRFInterface(*(data+5)),
+						getRFProtocol(*(data+4)));
 				break;			
 			case NCI_MSG_RF_INTF_ACTIVATED :
 				strcpy(ctrlcommand,"INTF_ACTIVATED");			
-				sprintf(parameter,"Intf: %s , Proto: %s , Techo:%s",getRFInterface(*(data+4)),
+				sprintf(parameter,"Dis_ID:%d , Intf: %s , Proto: %s , Techo:%s",*(data+3),getRFInterface(*(data+4)),
 						getRFProtocol(*(data+5)), getRFTecoAndMode(*(data+6)));
 				break;			
 			case NCI_MSG_RF_DEACTIVATE :
