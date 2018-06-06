@@ -259,7 +259,12 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 				break;			
 			case NCI_MSG_RF_DISCOVER :
 				strcpy(ctrlcommand,"RF_DISCOVER");
-				if(type == NCI_MT_NTF){
+				if( type == NCI_MT_CMD ){
+					int configNum = *(data+3);
+					for(int i=0 ;i<configNum;i++){
+						sprintf(parameter,"%s\t%s",parameter,getRFTecoAndMode(*(data+4+2*i)));				
+					}
+				}else if(type == NCI_MT_NTF){
 					sprintf(parameter,"Dis_ID:%d , Proto: %s , Techo:%s",*(data+3), getRFProtocol(*(data+4)),
 						getRFTecoAndMode(*(data+5)));			
 				}
