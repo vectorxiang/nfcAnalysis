@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "nfcAnalysis.h"
+#include "nfc_tag4.h"
 
 #define ENABLE_NFC "Enabling NFC"
 #define DISABLE_NFC "Disabling NFC"
@@ -12,8 +13,10 @@
 
 char nfc_log[1024]={'\0'};
 FILE *w_fp;
+int selected = -1;
 
-void printControlOpration(char *time, char *action, uint8_t type,char *data_string, uint8_t *data,long data_length);
+void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,long data_length);
+void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data_length);
 char * getPacketType(uint8_t type);
 char * getStatusCodes(uint8_t code);
 char * getRFInterface(uint8_t intf);
@@ -130,10 +133,11 @@ int main(int argc ,char **argv)
 		
 		if(strlen(time)){
 			if(type == NCI_MT_DATA){
-				fprintf (w_fp, "%s\t%s\t\t%s\n",time,action,getPacketType(type));
+				analyzeData(time, action, type, data, data_length_int);
 				fprintf (w_fp, "------  %s\n",data_string);
 			}else if(type != 0xFF){
-				printControlOpration(time, action, type,data_string, data,data_length_int);				
+				printControlOpration(time, action, type, data,data_length_int);
+				fprintf (w_fp, "------  %s\n",data_string);				
 			}else
 				fprintf (w_fp, "%s\t%s\n",time,action);
 		}
@@ -144,7 +148,49 @@ int main(int argc ,char **argv)
     return 1;
 }
 
-void printControlOpration(char *time, char *action, uint8_t type,char *data_string, uint8_t *data,long data_length){
+void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
+	char ctrlcommand[128];
+	char parameter[4096];
+	memset(ctrlcommand, 0, sizeof(ctrlcommand));
+	memset(parameter, 0, sizeof(parameter));
+	data+=3; 
+	data_length-=3;
+	if( selected == 0x04 ){	//PROTOCOL_ISO_DEP
+		if( !strcmp(action,"==>") ){	//command
+			uint8_t cla = data[0];
+			uint8_t ins = data[1];
+			uint8_t p1 = data[2];
+			uint8_t p2 = data[3];
+			if( cla == 0x00 && ins == 0xA4 ){ // SELECT
+				strcpy(ctrlcommand,"Select");
+				if( p1==0x04 && p2==0x00 ){
+					if( data[4]==0x07 && ( !memcmp(&data[5], NDEF_Tag_Application ,7) || 
+						!memcmp(&data[5], NDEF_Tag_Application_ ,7)) )
+						strcpy(parameter,"BY_NAME\t\tNDEF_Tag_Application");
+				}else if( p1==0x00 && p2==0x0C ){
+					if( data[4]==0x02 && !memcmp(&data[5], CC_FILE ,2) )
+						strcpy(parameter,"BY_ID\t\tCC_FILE");
+					else if( data[4]==0x02 ){
+						sprintf(parameter,"BY_ID\t\t%02X%02X",data[5],data[6]);
+					}
+				}					
+			}else if( cla == 0x00 && ins == 0xB0 ){		//ReadBinary
+				unsigned short offset = data[2]<<8|data[3];
+				strcpy(ctrlcommand,"Read");
+				sprintf(parameter, "Offset:%04X",offset);
+				sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
+			}	
+		}else if( !strcmp(action,"<==") ){
+			if( data[data_length-2]==0x90 && data[data_length-1]==0x00 )
+				strcpy(parameter,"Success");
+			if( data[data_length-2]==0x6A && data[data_length-1]==0x82 )
+				strcpy(parameter,"FAIL");				
+		}
+	}
+	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
+}
+
+void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
 	char ctrlcommand[128];
 	char parameter[4096];
 	memset(ctrlcommand, 0, sizeof(ctrlcommand));
@@ -160,7 +206,7 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 						strcpy(parameter,"Reset Configuration");
 					else if(data[3]==0x00)
 						strcpy(parameter,"Keep Configuration");	
-				}		
+				}			
 				break;
 			case NCI_MSG_CORE_INIT :
 				strcpy(ctrlcommand,"INIT");
@@ -271,9 +317,11 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 				break;			
 			case NCI_MSG_RF_DISCOVER_SELECT :
 				strcpy(ctrlcommand,"DISCOVER_SELECT");
-				if( type == NCI_MT_CMD )
+				if( type == NCI_MT_CMD ){
 					sprintf(parameter,"Dis_ID:%d , Intf: %s , Proto: %s",*(data+3),getRFInterface(*(data+5)),
 						getRFProtocol(*(data+4)));
+					selected = *(data+4);
+				}
 				break;			
 			case NCI_MSG_RF_INTF_ACTIVATED :
 				strcpy(ctrlcommand,"INTF_ACTIVATED");			
@@ -282,6 +330,7 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 				break;			
 			case NCI_MSG_RF_DEACTIVATE :
 				strcpy(ctrlcommand,"DEACTIVATE");
+				selected = -1;
 				break;			
 			case NCI_MSG_RF_FIELD :
 				strcpy(ctrlcommand,"FILD");
@@ -360,7 +409,7 @@ void printControlOpration(char *time, char *action, uint8_t type,char *data_stri
 		fprintf (w_fp, "%s\t%s\t\t%s\t\t%s\n",time,action,getPacketType(type),ctrlcommand);
 	else
 		fprintf (w_fp, "%s\t%s\t\t%s\t\t%s\t\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
-	fprintf (w_fp, "------  %s\n",data_string);
+	
 }
 
 char * getPacketType(uint8_t type){
