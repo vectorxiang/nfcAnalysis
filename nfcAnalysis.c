@@ -334,6 +334,10 @@ void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,
 				break;			
 			case NCI_MSG_RF_FIELD :
 				strcpy(ctrlcommand,"FILD");
+				if(data[3]&0x01)
+					strcpy(parameter,"detected_field");
+				else
+					strcpy(parameter,"no_field");	
 				break;			
 			case NCI_MSG_RF_T3T_POLLING :
 				strcpy(ctrlcommand,"T3T_POLLING");
