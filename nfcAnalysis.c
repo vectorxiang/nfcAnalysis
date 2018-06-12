@@ -22,6 +22,7 @@ char * getStatusCodes(uint8_t code);
 char * getRFInterface(uint8_t intf);
 char * getRFProtocol(uint8_t proto);
 char * getRFTecoAndMode(uint8_t teco);
+char * getNfcDepType(uint8_t ptype);
 
 void GetFilename(char *file_path){
     char ch = '\/';
@@ -148,46 +149,69 @@ int main(int argc ,char **argv)
     return 1;
 }
 
-void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
+void analyze_ISO_DEP(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
 	char ctrlcommand[128];
 	char parameter[4096];
 	memset(ctrlcommand, 0, sizeof(ctrlcommand));
 	memset(parameter, 0, sizeof(parameter));
+	if( !strcmp(action,"==>") ){	//command
+		uint8_t cla = data[0];
+		uint8_t ins = data[1];
+		uint8_t p1 = data[2];
+		uint8_t p2 = data[3];
+		if( cla == 0x00 && ins == 0xA4 ){ // SELECT
+			strcpy(ctrlcommand,"Select");
+			if( p1==0x04 && p2==0x00 ){
+				if( data[4]==0x07 && ( !memcmp(&data[5], NDEF_Tag_Application ,7) || 
+					!memcmp(&data[5], NDEF_Tag_Application_ ,7)) )
+					strcpy(parameter,"BY_NAME\t\tNDEF_Tag_Application");
+			}else if( p1==0x00 && p2==0x0C ){
+				if( data[4]==0x02 && !memcmp(&data[5], CC_FILE ,2) )
+					strcpy(parameter,"BY_ID\t\tCC_FILE");
+				else if( data[4]==0x02 ){
+					sprintf(parameter,"BY_ID\t\t%02X%02X",data[5],data[6]);
+				}
+			}					
+		}else if( cla == 0x00 && ins == 0xB0 ){		//ReadBinary
+			unsigned short offset = data[2]<<8|data[3];
+			strcpy(ctrlcommand,"Read");
+			sprintf(parameter, "Offset:%04X",offset);
+			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
+		}	
+	}else if( !strcmp(action,"<==") ){
+		if( data[data_length-2]==0x90 && data[data_length-1]==0x00 )
+			strcpy(parameter,"Success");
+		if( data[data_length-2]==0x6A && data[data_length-1]==0x82 )
+			strcpy(parameter,"FAIL");				
+	}
+	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
+}
+
+void analyze_NFC_DEP(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
+	char ctrlcommand[128];
+	char parameter[4096];
+	memset(ctrlcommand, 0, sizeof(ctrlcommand));
+	memset(parameter, 0, sizeof(parameter));
+	uint8_t dsap = data[0]>>2;
+	uint8_t ptype = ((data[0]&0x3)<<2)|((data[1]&0xC0)>>6);
+	uint8_t ssap = data[1]&0x3F;
+	sprintf(ctrlcommand,"Ptype: %s, DSAP: %02X, SSAP: %02X",getNfcDepType(ptype),dsap,ssap);
+	if(ptype == 0x04){
+		if(data[2] == 0x06)	//Service Name
+			sprintf(parameter,"%s",&data[4]);
+	}
+
+	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
+}
+
+void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
 	data+=3; 
 	data_length-=3;
 	if( selected == 0x04 ){	//PROTOCOL_ISO_DEP
-		if( !strcmp(action,"==>") ){	//command
-			uint8_t cla = data[0];
-			uint8_t ins = data[1];
-			uint8_t p1 = data[2];
-			uint8_t p2 = data[3];
-			if( cla == 0x00 && ins == 0xA4 ){ // SELECT
-				strcpy(ctrlcommand,"Select");
-				if( p1==0x04 && p2==0x00 ){
-					if( data[4]==0x07 && ( !memcmp(&data[5], NDEF_Tag_Application ,7) || 
-						!memcmp(&data[5], NDEF_Tag_Application_ ,7)) )
-						strcpy(parameter,"BY_NAME\t\tNDEF_Tag_Application");
-				}else if( p1==0x00 && p2==0x0C ){
-					if( data[4]==0x02 && !memcmp(&data[5], CC_FILE ,2) )
-						strcpy(parameter,"BY_ID\t\tCC_FILE");
-					else if( data[4]==0x02 ){
-						sprintf(parameter,"BY_ID\t\t%02X%02X",data[5],data[6]);
-					}
-				}					
-			}else if( cla == 0x00 && ins == 0xB0 ){		//ReadBinary
-				unsigned short offset = data[2]<<8|data[3];
-				strcpy(ctrlcommand,"Read");
-				sprintf(parameter, "Offset:%04X",offset);
-				sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
-			}	
-		}else if( !strcmp(action,"<==") ){
-			if( data[data_length-2]==0x90 && data[data_length-1]==0x00 )
-				strcpy(parameter,"Success");
-			if( data[data_length-2]==0x6A && data[data_length-1]==0x82 )
-				strcpy(parameter,"FAIL");				
-		}
+		analyze_ISO_DEP(time, action, type, data, data_length);
+	}else if( selected == 0x05 ){ //PROTOCOL_NFC_DEP
+		analyze_NFC_DEP(time, action, type, data, data_length);
 	}
-	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
 }
 
 void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
@@ -319,14 +343,14 @@ void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,
 				strcpy(ctrlcommand,"DISCOVER_SELECT");
 				if( type == NCI_MT_CMD ){
 					sprintf(parameter,"Dis_ID:%d , Intf: %s , Proto: %s",*(data+3),getRFInterface(*(data+5)),
-						getRFProtocol(*(data+4)));
-					selected = *(data+4);
+						getRFProtocol(*(data+4)));	
 				}
 				break;			
 			case NCI_MSG_RF_INTF_ACTIVATED :
 				strcpy(ctrlcommand,"INTF_ACTIVATED");			
 				sprintf(parameter,"Dis_ID:%d , Intf: %s , Proto: %s , Techo:%s",*(data+3),getRFInterface(*(data+4)),
 						getRFProtocol(*(data+5)), getRFTecoAndMode(*(data+6)));
+				selected = *(data+5);
 				break;			
 			case NCI_MSG_RF_DEACTIVATE :
 				strcpy(ctrlcommand,"DEACTIVATE");
@@ -587,4 +611,38 @@ char * getRFTecoAndMode(uint8_t teco){
 	else
 		strcpy(RF_techo,"UNKNOWN");	
 	return RF_techo;
+}
+
+char * getNfcDepType(uint8_t ptype){
+	static char nfc_dep_ptype[48];
+	memset(nfc_dep_ptype, 0, sizeof(nfc_dep_ptype));
+	if(ptype == 0x00 )
+		strcpy(nfc_dep_ptype,"SYMM");
+	else if(ptype == 0x01)
+		strcpy(nfc_dep_ptype,"Parameter_Exchange");
+	else if(ptype == 0x02 )
+		strcpy(nfc_dep_ptype,"Aggregated_Frame");
+	else if(ptype == 0x03 )
+		strcpy(nfc_dep_ptype,"Unnumbered_Infor");
+	else if(ptype == 0x04 )
+		strcpy(nfc_dep_ptype,"CONNECT");		
+	else if(ptype == 0x05 )
+		strcpy(nfc_dep_ptype,"DISCONNECT");
+	else if(ptype == 0x06 )
+		strcpy(nfc_dep_ptype,"Connect_Complete");
+	else if(ptype == 0x07 )
+		strcpy(nfc_dep_ptype,"Disconnect_Mode");	
+	else if(ptype == 0x08 )
+		strcpy(nfc_dep_ptype,"Frame_Reject");
+	else if(ptype == 0x09 )
+		strcpy(nfc_dep_ptype,"Service_Name_Loopup");
+	else if(ptype == 0x0C )
+		strcpy(nfc_dep_ptype,"Information");
+	else if(ptype == 0x0D )
+		strcpy(nfc_dep_ptype,"Receive_Ready");
+	else if(ptype == 0x0E )
+		strcpy(nfc_dep_ptype,"Receive_Not_Ready");
+	else
+		strcpy(nfc_dep_ptype,"UNKNOWN");	
+	return nfc_dep_ptype;
 }
