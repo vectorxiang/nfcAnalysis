@@ -211,7 +211,8 @@ void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data
 		analyze_ISO_DEP(time, action, type, data, data_length);
 	}else if( selected == 0x05 ){ //PROTOCOL_NFC_DEP
 		analyze_NFC_DEP(time, action, type, data, data_length);
-	}
+	}else
+		fprintf (w_fp, "%s\t%s\t\t%s\n",time,action,getPacketType(type));		
 }
 
 void printControlOpration(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
