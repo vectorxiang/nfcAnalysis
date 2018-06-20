@@ -55,31 +55,41 @@ int main(int argc ,char **argv)
 	char data_string[4096] = {'\0'};
 	uint8_t data[128];
 	uint8_t type = 0xFF;
-	long data_length_int; 	
+	long data_length_int;
+	FILE *r_fp; 	
 	
-	if(argc!=2){
-		printf("Pls input : nfcAnalysis filepath");
+	if(argc == 1){	//read from adb 
+		w_fp = stdout;
+		r_fp = popen( "adb logcat", "r" );
+		if (NULL == r_fp)
+		{
+			printf("read adb logcat fail\n");
+		    return -1;
+		}
+	}else if(argc == 2){	//read from log file
+		strcpy(file_path, *(argv+1));
+		printf("file path is %s\n",file_path);	
+		GetFilename(file_path);	
+		printf("output file is %s\n",nfc_log);
+		w_fp=fopen(nfc_log,"w+");
+		if (NULL == w_fp)
+		{
+			printf("create nfcAnalysis fail\n");
+		    return -1;
+		}
+		r_fp=fopen(file_path,"r");
+		if (NULL == r_fp)
+		{
+			printf("can not open %s\n,",file_path);
+		    return -1;
+		}
+	}else{	//error parameters 
+		printf("usage:\n");
+		printf("read from adb logcat , input : nfcAnalysis\n");
+		printf("read from logcat file ,input : nfcAnalysis logPath\n");
 		return -1;
-	}
-	strcpy(file_path, *(argv+1));
-    printf("file path is %s\n",file_path);
+	}	
 	
-	GetFilename(file_path);
-	
-	printf("output file is %s\n",nfc_log);
-		
-	w_fp=fopen(nfc_log,"w+");
-    if (NULL == w_fp)
-    {
-		printf("create nfcAnalysis fail\n");
-        return -1;
-    }
-	FILE *r_fp=fopen(file_path,"r");
-    if (NULL == r_fp)
-    {
-		printf("can not open %s\n,",file_path);
-        return -1;
-    }
 	
     while(fgets(log_string, 4096, r_fp)!=NULL){
 		if(strlen(time)){
