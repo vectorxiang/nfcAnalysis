@@ -71,16 +71,16 @@ int main(int argc ,char **argv)
 		printf("file path is %s\n",file_path);	
 		GetFilename(file_path);	
 		printf("output file is %s\n",nfc_log);
-		w_fp=fopen(nfc_log,"w+");
-		if (NULL == w_fp)
-		{
-			printf("create nfcAnalysis fail\n");
-		    return -1;
-		}
 		r_fp=fopen(file_path,"r");
 		if (NULL == r_fp)
 		{
 			printf("can not open %s\n,",file_path);
+		    return -1;
+		}
+		w_fp=fopen(nfc_log,"w+");
+		if (NULL == w_fp)
+		{
+			printf("create nfcAnalysis fail\n");
 		    return -1;
 		}
 	}else{	//error parameters 
@@ -187,12 +187,33 @@ void analyze_ISO_DEP(char *time, char *action, uint8_t type, uint8_t *data,long 
 			strcpy(ctrlcommand,"Read");
 			sprintf(parameter, "Offset:%04X",offset);
 			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
-		}	
+		}else if( cla == 0x00 && ins == 0xD6 ){		//UpdateBinary
+			unsigned short offset = data[2]<<8|data[3];
+			strcpy(ctrlcommand,"Write");
+			sprintf(parameter, "Offset:%04X",offset);
+			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
+		}		
 	}else if( !strcmp(action,"<==") ){
-		if( data[data_length-2]==0x90 && data[data_length-1]==0x00 )
-			strcpy(parameter,"Success");
-		if( data[data_length-2]==0x6A && data[data_length-1]==0x82 )
-			strcpy(parameter,"FAIL");				
+		uint16_t status_words;
+		BE_STREAM_TO_UINT16(status_words, (data+data_length-2));
+		if(status_words == T4T_RSP_CMD_CMPLTED)
+			strcpy(parameter,"CMD_CMPLTED");
+		else if(status_words == T4T_RSP_NOT_FOUND)
+			strcpy(parameter,"NOT_FOUND");
+		else if(status_words == T4T_RSP_WRONG_PARAMS)
+			strcpy(parameter,"WRONG_PARAMS");
+		else if(status_words == T4T_RSP_CLASS_NOT_SUPPORTED)
+			strcpy(parameter,"CLASS_NOT_SUPPORTED");
+		else if(status_words == T4T_RSP_WRONG_LENGTH)
+			strcpy(parameter,"WRONG_LENGTH");
+		else if(status_words == T4T_RSP_INSTR_NOT_SUPPORTED)
+			strcpy(parameter,"INSTR_NOT_SUPPORTED");	
+		else if(status_words == T4T_RSP_CMD_NOT_ALLOWED)
+			strcpy(parameter,"CMD_NOT_ALLOWED");
+		else if(status_words == SW_INCORRECT_P1P2)
+			strcpy(parameter,"INCORRECT_P1P2");
+		else if(status_words == SW_FILE_OR_APP_NOT_FOUND)
+			strcpy(parameter,"FILE_OR_APP_NOT_FOUND");																												
 	}
 	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
 }

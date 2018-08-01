@@ -1,6 +1,12 @@
 #include <stdio.h>
 
 typedef unsigned char uint8_t;
+typedef unsigned short uint16_t; 
+
+#define BE_STREAM_TO_UINT16(u16, p)                                     \
+  {                                                                     \
+    u16 = (uint16_t)(((uint16_t)(*(p)) << 8) + (uint16_t)(*((p) + 1))); \
+  }
 
 /*  packet type */
 #define NCI_MT_DATA 0x00
