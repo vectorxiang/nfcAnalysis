@@ -3,6 +3,13 @@
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t; 
 
+#define ENABLE_NFC "Enabling NFC"
+#define DISABLE_NFC "Disabling NFC"
+#define NFC_ENABLED "NFC Enabled"
+#define NFC_DISABLED "NFC Disabled"
+#define DATA_SEND "NxpNciX"
+#define DATA_RECEIVE "NxpNciR"
+
 #define BE_STREAM_TO_UINT16(u16, p)                                     \
   {                                                                     \
     u16 = (uint16_t)(((uint16_t)(*(p)) << 8) + (uint16_t)(*((p) + 1))); \
@@ -19,6 +26,20 @@ typedef unsigned short uint16_t;
 #define NCI_GID_RF_MANAGE 0x01 /* 0001b RF Management group */
 #define NCI_GID_EE_MANAGE 0x02 /* 0010b NFCEE Management group */
 #define NCI_GID_PROP 0x0F      /* 1111b Proprietary */
+
+/**********************************************
+ * Supported Protocols
+ **********************************************/
+#define NCI_PROTOCOL_UNKNOWN 0x00
+#define NCI_PROTOCOL_T1T 0x01
+#define NCI_PROTOCOL_T2T 0x02
+#define NCI_PROTOCOL_T3T 0x03
+#define NCI_PROTOCOL_ISO_DEP 0x04
+#define NCI_PROTOCOL_NFC_DEP 0x05
+#define NCI_PROTOCOL_15693 0x06
+#define NCI_PROTOCOL_MIFARE_CLASSIC 0x80
+#define NCI_PROTOCOL_KOVIO 0x81
+#define NCI_PROTOCOL_ISO7816 0xA0
 
 /**********************************************
  * NCI Core Group Opcode        - 0

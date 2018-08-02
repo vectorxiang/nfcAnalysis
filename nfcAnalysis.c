@@ -2,14 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "nfcAnalysis.h"
-#include "nfc_tag4.h"
-
-#define ENABLE_NFC "Enabling NFC"
-#define DISABLE_NFC "Disabling NFC"
-#define NFC_ENABLED "NFC Enabled"
-#define NFC_DISABLED "NFC Disabled"
-#define DATA_SEND "NxpNciX"
-#define DATA_RECEIVE "NxpNciR"
+#include "tags_defs.h"
 
 char nfc_log[1024]={'\0'};
 FILE *w_fp;
@@ -169,30 +162,34 @@ void analyze_ISO_DEP(char *time, char *action, uint8_t type, uint8_t *data,long 
 		uint8_t ins = data[1];
 		uint8_t p1 = data[2];
 		uint8_t p2 = data[3];
-		if( cla == 0x00 && ins == 0xA4 ){ // SELECT
+		if( cla == T4T_CMD_CLASS && ins == T4T_CMD_INS_SELECT ){ // SELECT
 			strcpy(ctrlcommand,"Select");
-			if( p1==0x04 && p2==0x00 ){
-				if( data[4]==0x07 && ( !memcmp(&data[5], NDEF_Tag_Application ,7) || 
-					!memcmp(&data[5], NDEF_Tag_Application_ ,7)) )
+			if( p1==T4T_CMD_P1_SELECT_BY_NAME && p2==T4T_CMD_P2_FIRST_OR_ONLY_00H ){
+				if( data[4]==T4T_NDEF_TAG_AID_LEN && ( !memcmp(&data[5], T4T_V10_NDEF_TAG_AID ,7) || 
+					!memcmp(&data[5], T4T_V20_NDEF_TAG_AID ,7)) )
 					strcpy(parameter,"BY_NAME\t\tNDEF_Tag_Application");
-			}else if( p1==0x00 && p2==0x0C ){
-				if( data[4]==0x02 && !memcmp(&data[5], CC_FILE ,2) )
+			}else if( p1==T4T_CMD_P1_SELECT_BY_FILE_ID && p2==T4T_CMD_P2_FIRST_OR_ONLY_0CH ){
+				if( data[4]==T4T_FILE_ID_SIZE && !memcmp(&data[5], T4T_CC_FILE_ID ,2) )
 					strcpy(parameter,"BY_ID\t\tCC_FILE");
-				else if( data[4]==0x02 ){
+				else if( data[4]==T4T_FILE_ID_SIZE ){
 					sprintf(parameter,"BY_ID\t\t%02X%02X",data[5],data[6]);
 				}
 			}					
-		}else if( cla == 0x00 && ins == 0xB0 ){		//ReadBinary
+		}else if( cla == T4T_CMD_CLASS && ins == T4T_CMD_INS_READ_BINARY ){		//ReadBinary
 			unsigned short offset = data[2]<<8|data[3];
 			strcpy(ctrlcommand,"Read");
 			sprintf(parameter, "Offset:%04X",offset);
 			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
-		}else if( cla == 0x00 && ins == 0xD6 ){		//UpdateBinary
+		}else if( cla == T4T_CMD_CLASS && ins == T4T_CMD_INS_UPDATE_BINARY ){		//UpdateBinary
 			unsigned short offset = data[2]<<8|data[3];
 			strcpy(ctrlcommand,"Write");
 			sprintf(parameter, "Offset:%04X",offset);
 			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
-		}		
+		}else if( cla == T4T_CMD_DES_CLASS && ins == T4T_CMD_INS_GET_HW_VERSION ){	
+			strcpy(ctrlcommand,"GET_HW_VERSION");
+		}else if( cla == T4T_CMD_DES_CLASS && ins == T4T_CMD_SELECT_APP ){	
+			strcpy(ctrlcommand,"SELECT_APP");
+		}					
 	}else if( !strcmp(action,"<==") ){
 		uint16_t status_words;
 		BE_STREAM_TO_UINT16(status_words, (data+data_length-2));
@@ -235,14 +232,40 @@ void analyze_NFC_DEP(char *time, char *action, uint8_t type, uint8_t *data,long 
 	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
 }
 
+void analyze_MIFARE_CLASSIC(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
+	char ctrlcommand[128];
+	char parameter[4096];
+	memset(ctrlcommand, 0, sizeof(ctrlcommand));
+	memset(parameter, 0, sizeof(parameter));
+	uint8_t reqId = data[0];
+	if( !strcmp(action,"==>") ){	//command
+		if( reqId == MFC_AUTH )
+			strcpy(ctrlcommand,"MFC_AUTH");
+	}else if( !strcmp(action,"<==") ){
+		if(reqId == MFC_AUTH){
+			strcpy(ctrlcommand,"MFC_AUTH");
+			uint8_t status = data[1];
+			if(status == 0x00)
+				strcpy(parameter,"OK");
+			else if(status == 0x03)
+				strcpy(parameter,"FAILED");
+		}
+	}		
+
+	fprintf (w_fp, "%s\t%s\t\t%s\t%s\t%s\n",time,action,getPacketType(type),ctrlcommand,parameter);
+}
+
 void analyzeData(char *time, char *action, uint8_t type, uint8_t *data,long data_length){
 	data+=3; 
 	data_length-=3;
-	if( selected == 0x04 ){	//PROTOCOL_ISO_DEP
+	if( selected == NCI_PROTOCOL_ISO_DEP ){	//PROTOCOL_ISO_DEP
 		analyze_ISO_DEP(time, action, type, data, data_length);
-	}else if( selected == 0x05 ){ //PROTOCOL_NFC_DEP
+	}else if( selected == NCI_PROTOCOL_NFC_DEP ){ //PROTOCOL_NFC_DEP
 		analyze_NFC_DEP(time, action, type, data, data_length);
-	}else
+	}else if( selected == NCI_PROTOCOL_MIFARE_CLASSIC ){ //MIFARE_CLASSIC
+		analyze_MIFARE_CLASSIC(time, action, type, data, data_length);
+	}
+	else
 		fprintf (w_fp, "%s\t%s\t\t%s\n",time,action,getPacketType(type));		
 }
 
@@ -580,30 +603,30 @@ char * getRFInterface(uint8_t intf){
 char * getRFProtocol(uint8_t proto){
 	static char RF_proto[24];
 	memset(RF_proto, 0, sizeof(RF_proto));
-	if(proto == 0x00 )
+	if(proto == NCI_PROTOCOL_UNKNOWN )
 		strcpy(RF_proto,"UNDETERMINED");
-	else if(proto == 0x01)
+	else if(proto == NCI_PROTOCOL_T1T)
 		strcpy(RF_proto,"T1T");
-	else if(proto == 0x02 )
+	else if(proto == NCI_PROTOCOL_T2T )
 		strcpy(RF_proto,"T2T");
-	else if(proto == 0x03 )
+	else if(proto == NCI_PROTOCOL_T3T )
 		strcpy(RF_proto,"T3T");
-	else if(proto == 0x04 )
+	else if(proto == NCI_PROTOCOL_ISO_DEP )
 		strcpy(RF_proto,"ISO_DEP");
-	else if(proto == 0x05 )
+	else if(proto == NCI_PROTOCOL_NFC_DEP )
 		strcpy(RF_proto,"NFC_DEP");
-	else if(proto == 0x06 )
+	else if(proto == NCI_PROTOCOL_15693 )
 		strcpy(RF_proto,"15693");
 	//add from PN553 user manual  +++
-	else if(proto == 0x80 )
+	else if(proto == NCI_PROTOCOL_MIFARE_CLASSIC )
 		strcpy(RF_proto,"MIFARE_CLASSIC");
-	else if(proto == 0x81 )
+	else if(proto == NCI_PROTOCOL_KOVIO )
 		strcpy(RF_proto,"KOVIO");
 	else if(proto == 0x82 )
 		strcpy(RF_proto,"X");
 	else if(proto == 0x83 )
 		strcpy(RF_proto,"Y");
-	else if(proto == 0xA0 )
+	else if(proto == NCI_PROTOCOL_ISO7816 )
 		strcpy(RF_proto,"SELECT_7816_AID");
 	//add from PN553 user manual  ---
 	else if(proto>=0x80 && proto<=0xFE)
