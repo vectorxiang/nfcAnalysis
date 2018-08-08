@@ -164,11 +164,16 @@ void analyze_ISO_DEP(char *time, char *action, uint8_t type, uint8_t *data,long 
 		uint8_t p2 = data[3];
 		if( cla == T4T_CMD_CLASS && ins == T4T_CMD_INS_SELECT ){ // SELECT
 			strcpy(ctrlcommand,"Select");
-			if( p1==T4T_CMD_P1_SELECT_BY_NAME && p2==T4T_CMD_P2_FIRST_OR_ONLY_00H ){
+			if( p1==T4T_CMD_P1_SELECT_BY_NAME ){
 				if( data[4]==T4T_NDEF_TAG_AID_LEN && ( !memcmp(&data[5], T4T_V10_NDEF_TAG_AID ,7) || 
 					!memcmp(&data[5], T4T_V20_NDEF_TAG_AID ,7)) )
 					strcpy(parameter,"BY_NAME\t\tNDEF_Tag_Application");
-			}else if( p1==T4T_CMD_P1_SELECT_BY_FILE_ID && p2==T4T_CMD_P2_FIRST_OR_ONLY_0CH ){
+				else{ 
+					char tmp[1024] = {'0'};
+					memcpy(tmp, &data[5], data[4]);
+					sprintf(parameter, "BY_NAME\t\t%s",tmp);
+				}
+			}else if( p1==T4T_CMD_P1_SELECT_BY_FILE_ID ){
 				if( data[4]==T4T_FILE_ID_SIZE && !memcmp(&data[5], T4T_CC_FILE_ID ,2) )
 					strcpy(parameter,"BY_ID\t\tCC_FILE");
 				else if( data[4]==T4T_FILE_ID_SIZE ){
@@ -185,6 +190,8 @@ void analyze_ISO_DEP(char *time, char *action, uint8_t type, uint8_t *data,long 
 			strcpy(ctrlcommand,"Write");
 			sprintf(parameter, "Offset:%04X",offset);
 			sprintf(parameter, "%s\t\tLen:%02X",parameter,data[data_length-1]);
+		}else if( cla == T4T_CMD_CLASS && ins == T4T_CMD_INS_READ_RECORD ){		//ReadRecord
+			strcpy(ctrlcommand,"ReadRecord");
 		}else if( cla == T4T_CMD_DES_CLASS && ins == T4T_CMD_INS_GET_HW_VERSION ){	
 			strcpy(ctrlcommand,"GET_HW_VERSION");
 		}else if( cla == T4T_CMD_DES_CLASS && ins == T4T_CMD_SELECT_APP ){	
